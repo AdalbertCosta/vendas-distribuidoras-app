@@ -1,113 +1,119 @@
-# ============================================================
-# 📊 Visualização de Vendas - Distribuidora
-# Desenvolvido por Adalberto Costa
-# ============================================================
-
 import streamlit as st
 import pandas as pd
 import altair as alt
-from datetime import datetime
+import hashlib
+import io
+import requests
 
-# ============================================================
-# ⚙️ Configurações da página
-# ============================================================
-st.set_page_config(
-    page_title="Visualização de Vendas - Distribuidora",
-    page_icon="📈",
-    layout="wide",
-)
+# =====================================================
+# ⚙️ CONFIGURAÇÃO DA PÁGINA
+# =====================================================
+st.set_page_config(page_title="Vendas Distribuidoras", layout="wide")
+st.title("📊 Visualização de Vendas - Distribuidora")
 
-# ============================================================
-# 🧩 Carregamento do Excel via GitHub
-# ============================================================
-EXCEL_URL = "https://github.com/AdalbertCosta/vendas-distribuidoras-app/raw/refs/heads/main/data/Vendas_Dist.xlsx"
+# =====================================================
+# 🔒 LOGIN SIMPLES
+# =====================================================
+USUARIOS = {
+    "adalberto": "1234",
+    "admin": "admin"
+}
 
-@st.cache_data(ttl=3600)
+def autenticar():
+    st.sidebar.header("🔐 Acesso Restrito")
+    usuario = st.sidebar.text_input("Usuário")
+    senha = st.sidebar.text_input("Senha", type="password")
+    if st.sidebar.button("Entrar"):
+        if usuario in USUARIOS and senha == USUARIOS[usuario]:
+            st.session_state["autenticado"] = True
+            st.session_state["usuario"] = usuario
+            st.sidebar.success(f"Bem-vindo, {usuario} 👋")
+        else:
+            st.sidebar.error("Usuário ou senha inválidos.")
+
+def logout():
+    if st.sidebar.button("Sair"):
+        st.session_state["autenticado"] = False
+        st.session_state["usuario"] = None
+        st.rerun()
+
+if "autenticado" not in st.session_state:
+    st.session_state["autenticado"] = False
+    st.session_state["usuario"] = None
+
+if not st.session_state["autenticado"]:
+    autenticar()
+    st.stop()
+else:
+    st.sidebar.info(f"Usuário: **{st.session_state['usuario']}**")
+    logout()
+
+# =====================================================
+# 📦 ARQUIVO EXCEL VIA GITHUB
+# =====================================================
+URL_GITHUB = "https://github.com/AdalbertCosta/vendas-distribuidoras-app/raw/refs/heads/main/data/Vendas_Dist.xlsx"
+nome_aba = "dist_novobi"
+
+@st.cache_data
 def carregar_dados():
     try:
-        df = pd.read_excel(EXCEL_URL, engine="openpyxl")
+        r = requests.get(URL_GITHUB)
+        r.raise_for_status()
+        bytes_io = io.BytesIO(r.content)
+        df = pd.read_excel(bytes_io, sheet_name=nome_aba, dtype=str)
+        df.columns = df.columns.str.strip()
+        if 'Data' in df.columns:
+            df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
+        if 'TotalLinha' in df.columns:
+            df['TotalLinha'] = pd.to_numeric(df['TotalLinha'].astype(str).str.replace(',', '.'), errors='coerce')
+        if 'Quantidade' in df.columns:
+            df['Quantidade'] = pd.to_numeric(df['Quantidade'].astype(str).str.replace(',', '.'), errors='coerce')
+        df = df.dropna(subset=['Data', 'TotalLinha'])
         return df
     except Exception as e:
-        st.error(f"Erro ao carregar o arquivo: {e}")
-        return None
+        st.error(f"❌ Erro ao carregar dados: {e}")
+        return pd.DataFrame()
 
-# ============================================================
-# 🕓 Cabeçalho e banner dinâmico
-# ============================================================
-st.markdown("""
-    <h1 style='text-align:center; color:#0a5a7f;'>
-        📊 Visualização de Vendas - Distribuidora
-    </h1>
-""", unsafe_allow_html=True)
-
-# Informativo sobre atualização da base
-ultima_atualizacao = datetime.now().strftime("%d/%m/%Y - %H:%M")
-st.success(f"📅 **Última atualização:** {ultima_atualizacao} (via GitHub)")
-
-# ============================================================
-# 🧠 Carregamento dos dados
-# ============================================================
 df = carregar_dados()
-
-if df is None:
-    st.warning("⚠️ Nenhum dado foi carregado. Verifique se o Excel está acessível.")
+if df.empty:
+    st.warning("⚠️ Nenhum dado carregado. Verifique se o Excel está acessível.")
     st.stop()
 
-# ============================================================
-# 🔍 Pré-processamento e KPIs
-# ============================================================
-st.sidebar.header("🔎 Filtros")
+# =====================================================
+# 🔍 FILTROS LATERAIS
+# =====================================================
+st.sidebar.header("🧭 Filtros")
 
-# Filtros dinâmicos
-colunas_numericas = df.select_dtypes(include="number").columns.tolist()
-colunas_texto = df.select_dtypes(include="object").columns.tolist()
+coluna_filtro = st.sidebar.selectbox("Selecione uma coluna de filtro:", df.columns)
+valores_unicos = ["Todos"] + sorted(df[coluna_filtro].dropna().unique().tolist())
+valor_filtro = st.sidebar.selectbox("Selecione o valor:", valores_unicos)
 
-filtro_coluna = st.sidebar.selectbox("Selecione uma coluna de filtro:", colunas_texto)
-valores = ["Todos"] + sorted(df[filtro_coluna].dropna().unique().tolist())
-filtro_valor = st.sidebar.selectbox("Selecione o valor:", valores)
+if valor_filtro != "Todos":
+    df = df[df[coluna_filtro] == valor_filtro]
 
-if filtro_valor != "Todos":
-    df = df[df[filtro_coluna] == filtro_valor]
+st.sidebar.button("🔄 Atualizar dados", on_click=lambda: st.cache_data.clear())
 
-# ============================================================
-# 📊 KPIs principais
-# ============================================================
-col1, col2, col3 = st.columns(3)
-col1.metric("📦 Total de Registros", f"{len(df):,}".replace(",", "."))
-if "I" in df.columns:
-    col2.metric("💰 Valor Médio (coluna I)", f"R$ {df['I'].mean():,.2f}")
-if "B" in df.columns:
-    col3.metric("📆 Última Data", str(df["B"].max()) if not df["B"].isna().all() else "—")
+# =====================================================
+# 📊 VISUALIZAÇÕES
+# =====================================================
+st.success("🕒 Última atualização: 22/10/2025 via GitHub")
+st.metric("📦 Total de Registros", f"{len(df):,}")
 
-# ============================================================
-# 📈 Gráfico de Vendas
-# ============================================================
-st.markdown("### 📈 Evolução das Vendas")
-
-if "B" in df.columns and "I" in df.columns:
-    chart = (
-        alt.Chart(df)
-        .mark_line(point=True)
-        .encode(
-            x=alt.X("B:T", title="Data"),
-            y=alt.Y("I:Q", title="Valor"),
-            tooltip=["B", "I"]
-        )
-        .properties(height=400)
-    )
+# === Gráfico de evolução ===
+if 'Data' in df.columns and 'TotalLinha' in df.columns:
+    df_graf = df.groupby('Data', as_index=False)['TotalLinha'].sum()
+    chart = alt.Chart(df_graf).mark_line(point=True).encode(
+        x=alt.X('Data:T', title='Data'),
+        y=alt.Y('TotalLinha:Q', title='Total de Vendas (R$)'),
+        tooltip=['Data', 'TotalLinha']
+    ).properties(title="📈 Evolução das Vendas", height=400)
     st.altair_chart(chart, use_container_width=True)
 else:
-    st.info("Não foi possível exibir o gráfico. Verifique se as colunas estão corretas (B = Data, I = Valor).")
+    st.info("ℹ️ Colunas necessárias ('Data' e 'TotalLinha') não encontradas.")
 
-# ============================================================
-# 📋 Exibição de Tabela
-# ============================================================
-st.markdown("### 📋 Dados Filtrados")
-st.dataframe(df.head(100))
+# === Dados Detalhados ===
+st.subheader("📋 Dados Filtrados")
+st.dataframe(df, use_container_width=True)
 
-# ============================================================
-# 🔁 Botão de atualização
-# ============================================================
-if st.sidebar.button("🔄 Atualizar dados"):
-    st.cache_data.clear()
-    st.success("Cache limpo! Recarregue a página para buscar os dados mais recentes.")
+# === Rodapé ===
+st.success("Cache limpo! Recarregue a página para buscar os dados mais recentes.")
