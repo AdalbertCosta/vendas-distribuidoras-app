@@ -53,9 +53,9 @@ else:
     logout()
 
 # =====================================================
-# 📂 CARREGAMENTO DO ARQUIVO
+# 📂 CARREGAMENTO DO ARQUIVO - VIA ONEDRIVE
 # =====================================================
-caminho_arquivo = os.path.join("data", "Vendas_Dist.xlsx")
+url_excel = "https://therapi-my.sharepoint.com/:x:/g/personal/ferramentas_therapi_com_br/EbtkNtLPQuxLrhN_rwKTf4cB6r9c-J_r_WJwTLcrYO49_A?e=IFSvdc"
 nome_aba = 'dist_novobi'
 
 colunas_desejadas = [
@@ -63,19 +63,12 @@ colunas_desejadas = [
     'ItemCode', 'Quantidade', 'TotalLinha'
 ]
 
-def hash_arquivo(path):
-    try:
-        with open(path, "rb") as f:
-            return hashlib.md5(f.read()).hexdigest()
-    except FileNotFoundError:
-        st.error("❌ Arquivo de base não encontrado. Verifique o caminho ou upload no GitHub.")
-        return None
-
+# Função para carregar dados diretamente do OneDrive
 @st.cache_data
-def carregar_dados(hash_arquivo=None):
+def carregar_dados():
     try:
         df = pd.read_excel(
-            caminho_arquivo,
+            url_excel,
             sheet_name=nome_aba,
             usecols=colunas_desejadas,
             dtype=str
@@ -90,11 +83,18 @@ def carregar_dados(hash_arquivo=None):
         st.error(f"❌ Erro ao carregar o arquivo: {e}")
         return pd.DataFrame()
 
-hash_atual = hash_arquivo(caminho_arquivo)
-df = carregar_dados(hash_atual)
+# Botão manual de atualização
+if st.button("🔄 Atualizar dados"):
+    st.cache_data.clear()
+    st.experimental_rerun()
+
+# Carrega os dados
+df = carregar_dados()
 
 if df.empty:
+    st.error("❌ Não foi possível carregar os dados. Verifique se o link do OneDrive é público e acessível.")
     st.stop()
+
 
 # =====================================================
 # 🔍 FILTROS
