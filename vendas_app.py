@@ -1,229 +1,113 @@
+# ============================================================
+# 📊 Visualização de Vendas - Distribuidora
+# Desenvolvido por Adalberto Costa
+# ============================================================
+
 import streamlit as st
 import pandas as pd
 import altair as alt
-import hashlib
+from datetime import datetime
 
-# =====================================================
-# ⚙️ CONFIGURAÇÃO DA PÁGINA
-# =====================================================
-st.set_page_config(page_title='Painel de Vendas Therapi Distribuidoras', layout='wide')
-st.title('📊 Visualização de Vendas - Distribuidora')
+# ============================================================
+# ⚙️ Configurações da página
+# ============================================================
+st.set_page_config(
+    page_title="Visualização de Vendas - Distribuidora",
+    page_icon="📈",
+    layout="wide",
+)
 
-# =====================================================
-# 🔒 SISTEMA DE LOGIN SIMPLES
-# =====================================================
-USUARIOS = {
-    "adalberto": "1234",
-    "televendas": "2027"
-}
+# ============================================================
+# 🧩 Carregamento do Excel via GitHub
+# ============================================================
+EXCEL_URL = "https://github.com/AdalbertCosta/vendas-distribuidoras-app/raw/refs/heads/main/data/Vendas_Dist.xlsx"
 
-def autenticar():
-    st.sidebar.header("🔐 Acesso Restrito")
-    usuario = st.sidebar.text_input("Usuário")
-    senha = st.sidebar.text_input("Senha", type="password")
-    if st.sidebar.button("Entrar"):
-        if usuario in USUARIOS and senha == USUARIOS[usuario]:
-            st.session_state["autenticado"] = True
-            st.session_state["usuario"] = usuario
-            st.sidebar.success(f"Bem-vindo, {usuario} 👋")
-        else:
-            st.sidebar.error("Usuário ou senha inválidos.")
-
-def logout():
-    if st.sidebar.button("Sair"):
-        st.session_state["autenticado"] = False
-        st.session_state["usuario"] = None
-        st.rerun()
-
-if "autenticado" not in st.session_state:
-    st.session_state["autenticado"] = False
-    st.session_state["usuario"] = None
-
-if not st.session_state["autenticado"]:
-    autenticar()
-    st.stop()
-else:
-    st.sidebar.info(f"Usuário: **{st.session_state['usuario']}**")
-    logout()
-
-# =====================================================
-# 📂 LINK DO ARQUIVO VIA GITHUB LFS
-# =====================================================
-url_excel = "https://github.com/AdalbertCosta/vendas-distribuidoras-app/raw/refs/heads/main/data/Vendas_Dist.xlsx"
-nome_aba = "dist_novobi"
-
-colunas_desejadas = [
-    "Operacao", "Data", "CodEmpresa", "CardCode", "Origem", "Utilizacao",
-    "ItemCode", "Quantidade", "TotalLinha"
-]
-
-# =====================================================
-# 🧠 CACHE E FUNÇÃO DE CARREGAMENTO
-# =====================================================
-def hash_url(url):
-    return hashlib.md5(url.encode()).hexdigest()
-
-@st.cache_data
-def carregar_dados(hash_url):
+@st.cache_data(ttl=3600)
+def carregar_dados():
     try:
-        df = pd.read_excel(
-            url_excel,
-            sheet_name=nome_aba,
-            usecols=colunas_desejadas,
-            dtype=str
-        )
-        df.columns = df.columns.str.strip()
-        df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
-        df['TotalLinha'] = pd.to_numeric(df['TotalLinha'].str.replace(',', '.'), errors='coerce')
-        df['Quantidade'] = pd.to_numeric(df['Quantidade'].str.replace(',', '.'), errors='coerce')
-        df = df.dropna(subset=['Data', 'TotalLinha', 'Quantidade'])
+        df = pd.read_excel(EXCEL_URL, engine="openpyxl")
         return df
     except Exception as e:
-        st.error(f"❌ Erro ao carregar o arquivo: {e}")
-        return pd.DataFrame()
+        st.error(f"Erro ao carregar o arquivo: {e}")
+        return None
 
-# =====================================================
-# 🔁 BOTÃO PARA ATUALIZAR OS DADOS
-# =====================================================
-st.sidebar.markdown("---")
-if st.sidebar.button("🔄 Atualizar dados"):
-    st.cache_data.clear()
-    st.success("Cache limpo! Recarregue a página para buscar os dados mais recentes.")
-    st.stop()
+# ============================================================
+# 🕓 Cabeçalho e banner dinâmico
+# ============================================================
+st.markdown("""
+    <h1 style='text-align:center; color:#0a5a7f;'>
+        📊 Visualização de Vendas - Distribuidora
+    </h1>
+""", unsafe_allow_html=True)
 
-# =====================================================
-# 🚀 CARREGAR DADOS
-# =====================================================
-df = carregar_dados(hash_url(url_excel))
+# Informativo sobre atualização da base
+ultima_atualizacao = datetime.now().strftime("%d/%m/%Y - %H:%M")
+st.success(f"📅 **Última atualização:** {ultima_atualizacao} (via GitHub)")
 
-if df.empty:
+# ============================================================
+# 🧠 Carregamento dos dados
+# ============================================================
+df = carregar_dados()
+
+if df is None:
     st.warning("⚠️ Nenhum dado foi carregado. Verifique se o Excel está acessível.")
     st.stop()
 
-# =====================================================
-# 🔍 FILTROS
-# =====================================================
-if 'CardCode' not in df.columns:
-    st.error("❌ A coluna 'CardCode' não foi encontrada no arquivo.")
-    st.stop()
+# ============================================================
+# 🔍 Pré-processamento e KPIs
+# ============================================================
+st.sidebar.header("🔎 Filtros")
 
-cardcodes = st.multiselect(
-    "🔍 Selecione o(s) código(s) de cliente (CardCode):",
-    options=sorted(df['CardCode'].dropna().unique()),
-    placeholder="Digite ou selecione o cliente..."
-)
-if not cardcodes:
-    st.warning("⚠️ Selecione pelo menos um 'CardCode' para visualizar os dados.")
-    st.stop()
+# Filtros dinâmicos
+colunas_numericas = df.select_dtypes(include="number").columns.tolist()
+colunas_texto = df.select_dtypes(include="object").columns.tolist()
 
-min_data, max_data = df['Data'].min(), df['Data'].max()
-data_inicio, data_fim = st.date_input(
-    "📅 Intervalo de datas:",
-    [min_data, max_data],
-    min_value=min_data,
-    max_value=max_data
-)
+filtro_coluna = st.sidebar.selectbox("Selecione uma coluna de filtro:", colunas_texto)
+valores = ["Todos"] + sorted(df[filtro_coluna].dropna().unique().tolist())
+filtro_valor = st.sidebar.selectbox("Selecione o valor:", valores)
 
-df_filtrado = df[
-    (df['CardCode'].isin(cardcodes)) &
-    (df['Data'] >= pd.to_datetime(data_inicio)) &
-    (df['Data'] <= pd.to_datetime(data_fim))
-].copy()
+if filtro_valor != "Todos":
+    df = df[df[filtro_coluna] == filtro_valor]
 
-if df_filtrado.empty:
-    st.warning("⚠️ Nenhum dado encontrado para os filtros selecionados.")
-    st.stop()
+# ============================================================
+# 📊 KPIs principais
+# ============================================================
+col1, col2, col3 = st.columns(3)
+col1.metric("📦 Total de Registros", f"{len(df):,}".replace(",", "."))
+if "I" in df.columns:
+    col2.metric("💰 Valor Médio (coluna I)", f"R$ {df['I'].mean():,.2f}")
+if "B" in df.columns:
+    col3.metric("📆 Última Data", str(df["B"].max()) if not df["B"].isna().all() else "—")
 
-# =====================================================
-# 📊 MÉTRICAS
-# =====================================================
-col1, col2 = st.columns(2)
-col1.metric("💰 Total de Vendas", f"R$ {df_filtrado['TotalLinha'].sum():,.2f}")
-col2.metric("📦 Quantidade Total", f"{df_filtrado['Quantidade'].sum():,.0f}")
+# ============================================================
+# 📈 Gráfico de Vendas
+# ============================================================
+st.markdown("### 📈 Evolução das Vendas")
 
-df_exibicao = df_filtrado.copy()
-df_exibicao['Data'] = df_exibicao['Data'].dt.strftime('%d/%m/%Y')
-st.dataframe(df_exibicao, use_container_width=True)
-
-# =====================================================
-# 📈 VISUALIZAÇÕES
-# =====================================================
-abas = st.tabs([
-    "📈 Evolução de Vendas",
-    "🏆 Top Produtos",
-    "👤 Total por Cliente",
-    "💳 Ticket Médio",
-    "📦 Por Origem"
-])
-
-# 📈 Evolução
-with abas[0]:
-    st.subheader("📈 Evolução das Vendas ao Longo do Tempo")
-    grafico_tempo = alt.Chart(df_filtrado).mark_line(point=True).encode(
-        x=alt.X("yearmonth(Data):T", title="Data"),
-        y=alt.Y("sum(TotalLinha):Q", title="Total de Vendas"),
-        color="CardCode:N",
-        tooltip=[
-            alt.Tooltip("yearmonth(Data):T", title="Data"),
-            alt.Tooltip("sum(TotalLinha):Q", title="Total de Vendas", format=",.2f"),
-            alt.Tooltip("CardCode:N", title="Cliente")
-        ]
-    ).properties(width="container", height=400)
-    st.altair_chart(grafico_tempo, use_container_width=True)
-
-# 🏆 Top Produtos
-with abas[1]:
-    st.subheader("🏆 Top Produtos Vendidos")
-    top_itens = df_filtrado.groupby("ItemCode")["Quantidade"].sum().nlargest(10).reset_index()
-    chart_top = alt.Chart(top_itens).mark_bar().encode(
-        x=alt.X("Quantidade:Q"),
-        y=alt.Y("ItemCode:N", sort="-x"),
-        tooltip=["ItemCode", "Quantidade"]
-    ).properties(width="container", height=400)
-    st.altair_chart(chart_top, use_container_width=True)
-
-# 👤 Total por Cliente
-with abas[2]:
-    st.subheader("👤 Total de Vendas por Cliente")
-    total_por_cliente = df_filtrado.groupby("CardCode")["TotalLinha"].sum().reset_index()
-    chart_cliente = alt.Chart(total_por_cliente).mark_bar().encode(
-        x=alt.X("TotalLinha:Q"),
-        y=alt.Y("CardCode:N", sort="-x"),
-        tooltip=[
-            alt.Tooltip("CardCode:N", title="Cliente"),
-            alt.Tooltip("TotalLinha:Q", title="Total", format=",.2f")
-        ]
-    ).properties(width="container", height=400)
-    st.altair_chart(chart_cliente, use_container_width=True)
-
-# 💳 Ticket Médio
-with abas[3]:
-    st.subheader("💳 Ticket Médio por Cliente")
-    ticket_medio = (
-        df_filtrado
-        .groupby("CardCode", as_index=False)
-        .agg({"TotalLinha": "sum", "Quantidade": "sum"})
+if "B" in df.columns and "I" in df.columns:
+    chart = (
+        alt.Chart(df)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("B:T", title="Data"),
+            y=alt.Y("I:Q", title="Valor"),
+            tooltip=["B", "I"]
+        )
+        .properties(height=400)
     )
-    ticket_medio = ticket_medio[ticket_medio["Quantidade"] > 0]
-    ticket_medio["Ticket Médio"] = ticket_medio["TotalLinha"] / ticket_medio["Quantidade"]
-    ticket_medio = ticket_medio[["CardCode", "Ticket Médio"]].sort_values(by="Ticket Médio", ascending=False)
-    chart_ticket = alt.Chart(ticket_medio).mark_bar().encode(
-        x=alt.X("Ticket Médio:Q"),
-        y=alt.Y("CardCode:N", sort="-x"),
-        tooltip=[
-            alt.Tooltip("CardCode:N"),
-            alt.Tooltip("Ticket Médio:Q", format=",.2f")
-        ]
-    ).properties(width="container", height=400)
-    st.altair_chart(chart_ticket, use_container_width=True)
+    st.altair_chart(chart, use_container_width=True)
+else:
+    st.info("Não foi possível exibir o gráfico. Verifique se as colunas estão corretas (B = Data, I = Valor).")
 
-# 📦 Por Origem
-with abas[4]:
-    st.subheader("📦 Distribuição por Origem")
-    quant_por_origem = df_filtrado.groupby("Origem")["Quantidade"].sum().reset_index()
-    chart_origem = alt.Chart(quant_por_origem).mark_bar().encode(
-        x=alt.X("Quantidade:Q"),
-        y=alt.Y("Origem:N", sort="-x"),
-        tooltip=["Origem", "Quantidade"]
-    ).properties(width="container", height=400)
-    st.altair_chart(chart_origem, use_container_width=True)
+# ============================================================
+# 📋 Exibição de Tabela
+# ============================================================
+st.markdown("### 📋 Dados Filtrados")
+st.dataframe(df.head(100))
+
+# ============================================================
+# 🔁 Botão de atualização
+# ============================================================
+if st.sidebar.button("🔄 Atualizar dados"):
+    st.cache_data.clear()
+    st.success("Cache limpo! Recarregue a página para buscar os dados mais recentes.")
