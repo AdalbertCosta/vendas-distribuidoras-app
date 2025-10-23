@@ -1,5 +1,5 @@
 # ============================================================
-# 📊 VISUALIZAÇÃO DE VENDAS - DISTRIBUIDORA (v2)
+# 📊 VISUALIZAÇÃO DE VENDAS - DISTRIBUIDORA (v3)
 # ============================================================
 
 import pandas as pd
@@ -22,9 +22,8 @@ colunas_desejadas = [
     "ItemCode", "Quantidade", "TotalLinha"
 ]
 
-
 # ============================================================
-# 🧭 FILTROS LATERAIS
+# 🔄 CARREGAMENTO DOS DADOS
 # ============================================================
 @st.cache_data
 def carregar_dados():
@@ -40,12 +39,12 @@ def carregar_dados():
         df.columns = df.columns.str.strip()
         df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
 
-        # Converte campos numéricos com segurança (suporta vírgulas)
+        # Conversão de valores com vírgulas
         for col in ["TotalLinha", "Quantidade"]:
             df[col] = (
                 df[col]
                 .astype(str)
-                .str.replace(r"[^0-9,.-]", "", regex=True)  # remove R$, espaços, letras
+                .str.replace(r"[^0-9,.-]", "", regex=True)  # remove R$, letras, espaços
                 .str.replace(",", ".", regex=False)         # troca vírgula por ponto
             )
             df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -58,18 +57,52 @@ def carregar_dados():
         return pd.DataFrame()
 
 
+# Carrega os dados
+df = carregar_dados()
+if df.empty:
+    st.stop()
+
 # ============================================================
-# 🔢 MÉTRICAS GERAIS
+# 🧭 FILTROS LATERAIS
 # ============================================================
+st.sidebar.header("🧩 Filtros de Visualização")
+
+clientes = sorted(df["CardCode"].dropna().unique())
+operacoes = sorted(df["Operacao"].dropna().unique())
+itens = sorted(df["ItemCode"].dropna().unique())
+
+cardcodes = st.sidebar.multiselect("🔍 Selecione cliente(s):", options=clientes, placeholder="Todos")
+operacao_sel = st.sidebar.multiselect("⚙️ Operação:", options=operacoes, placeholder="Todas")
+itens_sel = st.sidebar.multiselect("📦 ItemCode:", options=itens, placeholder="Todos")
+
+min_data, max_data = df["Data"].min(), df["Data"].max()
+data_inicio, data_fim = st.sidebar.date_input("📅 Intervalo de datas:", [min_data, max_data],
+                                              min_value=min_data, max_value=max_data)
+
+# Filtro dinâmico
+df_filtrado = df.copy()
+if cardcodes:
+    df_filtrado = df_filtrado[df_filtrado["CardCode"].isin(cardcodes)]
+if operacao_sel:
+    df_filtrado = df_filtrado[df_filtrado["Operacao"].isin(operacao_sel)]
+if itens_sel:
+    df_filtrado = df_filtrado[df_filtrado["ItemCode"].isin(itens_sel)]
+
+df_filtrado = df_filtrado[
+    (df_filtrado["Data"] >= pd.to_datetime(data_inicio)) &
+    (df_filtrado["Data"] <= pd.to_datetime(data_fim))
+]
+
 if df_filtrado.empty:
     st.warning("⚠️ Nenhum dado encontrado para os filtros aplicados.")
     st.stop()
 
+# ============================================================
 # 🔢 MÉTRICAS GERAIS
+# ============================================================
 col1, col2 = st.columns(2)
 col1.metric("💰 Total de Vendas", f"R$ {df_filtrado['TotalLinha'].sum():,.2f}")
 col2.metric("📦 Quantidade Total", f"{df_filtrado['Quantidade'].sum():,.0f}")
-
 
 # ============================================================
 # 🧮 EXIBIÇÃO DE DADOS
