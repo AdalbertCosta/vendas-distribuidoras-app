@@ -239,3 +239,77 @@ st.markdown("""
     Sistema de visualização de dados — Streamlit + Power BI DNA
 </div>
 """, unsafe_allow_html=True)
+
+
+# ============================================================
+# 🧠 RESUMO EXECUTIVO
+# ============================================================
+with abas[0]:
+    st.subheader("📊 Resumo Executivo — Insights Automáticos")
+
+    total = df_filtrado['TotalLinha'].sum()
+    qtd = df_filtrado['Quantidade'].sum()
+
+    # ====== Análise mensal ======
+    df_mes = df_filtrado.copy()
+    df_mes['Mes'] = df_mes['Data'].dt.to_period('M')
+    vendas_mes = df_mes.groupby('Mes')['TotalLinha'].sum().reset_index()
+    vendas_mes['Mes'] = vendas_mes['Mes'].astype(str)
+
+    if len(vendas_mes) > 1:
+        crescimento = (vendas_mes.iloc[-1, 1] - vendas_mes.iloc[-2, 1]) / vendas_mes.iloc[-2, 1] * 100
+        direcao = "⬆️ Crescimento" if crescimento > 0 else "⬇️ Queda"
+        cor = "#12ac68" if crescimento > 0 else "#b94a48"
+    else:
+        crescimento = 0
+        direcao = "Estável"
+        cor = "#999999"
+
+    # ====== Indicadores de destaque ======
+    ticket_medio = total / qtd if qtd > 0 else 0
+    cliente_top = df_filtrado.groupby('CardCode')['TotalLinha'].sum().nlargest(1).index[0]
+    produto_top = df_filtrado.groupby('ItemCode')['Quantidade'].sum().nlargest(1).index[0]
+
+    # ====== Texto analítico ======
+    st.markdown(f"""
+    💬 **Resumo Automático**
+    - Faturamento total no período: **R$ {total:,.2f}**
+    - Quantidade total vendida: **{qtd:,.0f} unidades**
+    - Ticket médio: **R$ {ticket_medio:,.2f}**
+    - Cliente destaque: **{cliente_top}**
+    - Produto destaque: **{produto_top}**
+    - Variação em relação ao mês anterior: **{direcao} de {abs(crescimento):.2f}%**
+    """, unsafe_allow_html=True)
+
+    # ====== Mini gráfico de tendência + projeção ======
+    st.markdown("---")
+    st.subheader("📈 Tendência Mensal de Faturamento e Projeção")
+
+    base_chart = alt.Chart(vendas_mes).mark_line(point=True, strokeWidth=3, color=cor).encode(
+        x=alt.X('Mes:N', title='Mês'),
+        y=alt.Y('TotalLinha:Q', title='Faturamento (R$)', axis=alt.Axis(format=',.0f')),
+        tooltip=[
+            alt.Tooltip('Mes:N', title='Mês'),
+            alt.Tooltip('TotalLinha:Q', title='Faturamento', format=',.2f')
+        ]
+    )
+
+    # Projeção de regressão linear
+    regressao = alt.Chart(vendas_mes).transform_regression(
+        'month(Mes)', 'TotalLinha', method='linear', extent=[0, len(vendas_mes)+2]
+    ).mark_line(color='orange', strokeDash=[6, 3]).encode(
+        x=alt.X('Mes:N', title='Mês'),
+        y='TotalLinha:Q'
+    )
+
+    # Combina gráfico real + linha de tendência
+    chart_tendencia = (base_chart + regressao).properties(height=350)
+    st.altair_chart(chart_tendencia, use_container_width=True)
+
+    # ====== Frase final de destaque ======
+    if crescimento > 0:
+        st.success(f"✅ Excelente desempenho! O último mês apresentou **{crescimento:.2f}% de crescimento** em relação ao anterior. A tendência indica **continuidade positiva** nos próximos meses.")
+    elif crescimento < 0:
+        st.error(f"⚠️ Atenção: houve **queda de {abs(crescimento):.2f}%** no faturamento em relação ao mês anterior. A tendência indica **necessidade de ação corretiva** para recuperação.")
+    else:
+        st.info("ℹ️ O faturamento permaneceu estável. A projeção sugere **leve oscilação neutra** nos próximos meses.")
