@@ -217,7 +217,7 @@ with abas[4]:
     st.altair_chart(chart_origem, use_container_width=True)
 
 # ============================================================
-# 📊 6. CRESCIMENTO POR CLIENTE
+# 📊 6. CRESCIMENTO POR CLIENTE (mês a mês)
 # ============================================================
 with abas[5]:
     st.subheader("📊 Crescimento por Cliente (mês a mês)")
@@ -240,10 +240,13 @@ with abas[5]:
             (df_crescimento["TotalLinha_atual"] - df_crescimento["TotalLinha_ant"])
             / df_crescimento["TotalLinha_ant"]
         ) * 100
+
+        # ✅ Formatação visual
         df_crescimento = df_crescimento.sort_values("Crescimento (%)", ascending=False).reset_index()
+        df_crescimento["Crescimento (%)"] = df_crescimento["Crescimento (%)"].apply(lambda x: f"{x:.2f}%")
 
         chart_crescimento = alt.Chart(df_crescimento.head(15)).mark_bar().encode(
-            x=alt.X("Crescimento (%):Q", title="% Crescimento"),
+            x=alt.X("Crescimento (%):Q", title="% Crescimento", axis=alt.Axis(format=".2f")),
             y=alt.Y("CardCode:N", sort="-x"),
             color=alt.condition(
                 alt.datum["Crescimento (%)"] > 0,
@@ -252,9 +255,9 @@ with abas[5]:
             ),
             tooltip=[
                 alt.Tooltip("CardCode:N", title="Cliente"),
-                alt.Tooltip("Crescimento (%):Q", format=".2f"),
-                alt.Tooltip("TotalLinha_atual:Q", title=f"Vendas {mes_atual}", format=",0.2f"),
-                alt.Tooltip("TotalLinha_ant:Q", title=f"Vendas {mes_anterior}", format=",0.2f")
+                alt.Tooltip("Crescimento (%):Q", title="% Crescimento", format=".2f"),
+                alt.Tooltip("TotalLinha_atual:Q", title=f"Vendas {mes_atual}", format=",.2f"),
+                alt.Tooltip("TotalLinha_ant:Q", title=f"Vendas {mes_anterior}", format=",.2f")
             ]
         ).properties(width="container", height=400)
 
