@@ -13,15 +13,47 @@ import hashlib
 st.set_page_config(page_title="Vendas Distribuidoras", layout="wide")
 st.title("📊 Visualização de Vendas - Distribuidora")
 
-# ------------------------------------------------------------
-# Caminho e parâmetros
-# ------------------------------------------------------------
-caminho_arquivo = "data/Vendas_Dist.xlsx"
+# ============================================================
+# 📦 ARQUIVO DE DADOS
+# ============================================================
+URL_GITHUB = "https://github.com/AdalbertCosta/vendas-distribuidoras-app/raw/refs/heads/main/data/Vendas_Dist.xlsx"
 nome_aba = "dist_novobi"
 colunas_desejadas = [
-    "Operacao", "Data", "CodEmpresa", "DocNum", "CardCode", "Cancelado",
-    "Origem", "Utilizacao", "ItemCode", "TotalDocumento", "TotalLinha", "Quantidade"
+    "Operacao", "Data", "CodEmpresa", "CardCode", "Origem", "Utilizacao",
+    "ItemCode", "Quantidade", "TotalLinha"
 ]
+
+# ============================================================
+# 🔄 Carregamento dos dados
+# ============================================================
+@st.cache_data
+def carregar_dados():
+    try:
+        df = pd.read_excel(URL_GITHUB, sheet_name=nome_aba, usecols=colunas_desejadas, dtype=str)
+        df.columns = df.columns.str.strip()
+
+        # Conversões numéricas seguras
+        df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+
+        def _parse_number(x):
+            if pd.isna(x):
+                return None
+            s = str(x).strip().replace("R$", "").replace(".", "").replace(",", ".")
+            try:
+                return float(s)
+            except:
+                return None
+
+        df["TotalLinha"] = df["TotalLinha"].map(_parse_number)
+        df["Quantidade"] = df["Quantidade"].map(_parse_number)
+
+        df = df.dropna(subset=["Data", "TotalLinha", "Quantidade"])
+        return df
+
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar o arquivo: {e}")
+        return pd.DataFrame()
+
 
 # ------------------------------------------------------------
 # Função de hash (cache inteligente)
