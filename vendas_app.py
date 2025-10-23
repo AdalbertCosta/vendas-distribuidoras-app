@@ -61,9 +61,15 @@ def carregar_dados():
 # ============================================================
 # 🔢 MÉTRICAS GERAIS
 # ============================================================
+if df_filtrado.empty:
+    st.warning("⚠️ Nenhum dado encontrado para os filtros aplicados.")
+    st.stop()
+
+# 🔢 MÉTRICAS GERAIS
 col1, col2 = st.columns(2)
 col1.metric("💰 Total de Vendas", f"R$ {df_filtrado['TotalLinha'].sum():,.2f}")
 col2.metric("📦 Quantidade Total", f"{df_filtrado['Quantidade'].sum():,.0f}")
+
 
 # ============================================================
 # 🧮 EXIBIÇÃO DE DADOS
