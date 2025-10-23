@@ -121,13 +121,14 @@ if df.empty:
 # ============================================================
 # 🧭 FILTROS
 # ============================================================
+
 st.sidebar.header("🧩 Filtros de Visualização")
 
 clientes   = sorted(df["CardCode"].dropna().unique())
 operacoes  = sorted(df["Operacao"].dropna().unique())
 itens      = sorted(df["ItemCode"].dropna().unique())
 
-cardcodes   = st.sidebar.multiselect("🔍 Cliente(s):", options=clientes,  placeholder="Todos")
+cardcodes   = st.sidebar.multiselect("🔍 Cliente(s):", options=clientes,  placeholder="Selecione cliente(s)...")
 operacao_sel= st.sidebar.multiselect("⚙️ Operação:",  options=operacoes, placeholder="Todas")
 itens_sel   = st.sidebar.multiselect("📦 ItemCode:",   options=itens,     placeholder="Todos")
 
@@ -136,8 +137,43 @@ data_inicio, data_fim = st.sidebar.date_input(
     "📅 Intervalo de datas:", [min_data, max_data], min_value=min_data, max_value=max_data
 )
 
-# Aplica filtros
+# 🏢 Filtro por Empresa
+mapeamento_empresas = {"10": "GAM", "20": "AND", "30": "FARMED"}
+df["EmpresaNome"] = df["CodEmpresa"].astype(str).map(mapeamento_empresas).fillna(df["CodEmpresa"])
+empresas = sorted(df["EmpresaNome"].dropna().unique())
+empresa_sel = st.sidebar.multiselect("🏢 Empresa:", options=empresas, placeholder="Todas")
+
+st.sidebar.markdown(
+    """
+    **🔎 Códigos de Empresa:**  
+    • 10 → GAM  
+    • 20 → AND  
+    • 30 → FARMED
+    """
+)
+
+# ============================================================
+# 🎛️ BOTÃO PARA ATUALIZAR GRÁFICOS
+# ============================================================
+
+gerar = st.sidebar.button("📊 Gerar Gráficos", type="primary")
+
+if not cardcodes and not gerar:
+    st.info("👆 Selecione um ou mais clientes e clique em **Gerar Gráficos** para visualizar os painéis.")
+    st.stop()
+
+if not gerar:
+    st.warning("⚠️ Clique em **Gerar Gráficos** para aplicar os filtros.")
+    st.stop()
+
+# ============================================================
+# 🔍 APLICAÇÃO DE FILTROS
+# ============================================================
+
 df_filtrado = df.copy()
+
+if empresa_sel:
+    df_filtrado = df_filtrado[df_filtrado["EmpresaNome"].isin(empresa_sel)]
 if cardcodes:
     df_filtrado = df_filtrado[df_filtrado["CardCode"].isin(cardcodes)]
 if operacao_sel:
@@ -153,7 +189,7 @@ df_filtrado = df_filtrado[
 if df_filtrado.empty:
     st.warning("⚠️ Nenhum dado encontrado para os filtros aplicados.")
     st.stop()
-    
+
 # ============================================================
 # 🏢 Filtro por Empresa (CodEmpresa)
 # ============================================================
