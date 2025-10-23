@@ -87,29 +87,7 @@ def _parse_number(x):
     except Exception:
         return None
 
-# ------------------------------------------------------------
-# Função para carregar dados
-# ------------------------------------------------------------
-@st.cache_data
-def carregar_dados(hash_arquivo=None):
-    try:
-        df = pd.read_excel(caminho_arquivo, sheet_name=nome_aba, usecols=colunas_desejadas, dtype=str)
-        df.columns = df.columns.str.strip()
 
-        df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
-        df["TotalLinha"] = df["TotalLinha"].map(_parse_number)
-        df["Quantidade"] = df["Quantidade"].map(_parse_number)
-        df = df.dropna(subset=["Data", "TotalLinha", "Quantidade"])
-        return df
-    except Exception as e:
-        st.error(f"❌ Erro ao carregar o arquivo: {e}")
-        return pd.DataFrame()
-
-df = carregar_dados(hash_arquivo(caminho_arquivo))
-
-if df.empty:
-    st.warning("⚠️ Nenhum dado foi carregado. Verifique se o Excel está acessível.")
-    st.stop()
 
 # ------------------------------------------------------------
 # Filtros laterais
