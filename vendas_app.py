@@ -157,14 +157,47 @@ st.sidebar.markdown(
 # 🎛️ BOTÃO PARA ATUALIZAR GRÁFICOS
 # ============================================================
 
-gerar = st.sidebar.button("📊 Gerar Gráficos", type="primary")
+if "gerar" not in st.session_state:
+    st.session_state.gerar = False
 
-if not cardcodes and not gerar:
-    st.info("👆 Selecione um ou mais clientes e clique em **Gerar Gráficos** para visualizar os painéis.")
+# Botão manual para aplicar filtros
+if st.sidebar.button("📊 Gerar Gráficos", type="primary"):
+    st.session_state.gerar = True
+
+# ============================================================
+# 🔍 APLICAÇÃO DE FILTROS (somente após clique)
+# ============================================================
+
+if not st.session_state.gerar:
+    st.info("👆 Selecione filtros e clique em **Gerar Gráficos** para visualizar os painéis.")
     st.stop()
 
-if not gerar:
-    st.warning("⚠️ Clique em **Gerar Gráficos** para aplicar os filtros.")
+df_filtrado = df.copy()
+
+# 🏢 Empresa
+if empresa_sel:
+    df_filtrado = df_filtrado[df_filtrado["EmpresaNome"].isin(empresa_sel)]
+
+# 🧑 Cliente
+if cardcodes:
+    df_filtrado = df_filtrado[df_filtrado["CardCode"].isin(cardcodes)]
+
+# ⚙️ Operação
+if operacao_sel:
+    df_filtrado = df_filtrado[df_filtrado["Operacao"].isin(operacao_sel)]
+
+# 📦 ItemCode
+if itens_sel:
+    df_filtrado = df_filtrado[df_filtrado["ItemCode"].isin(itens_sel)]
+
+# 📅 Intervalo de Datas
+df_filtrado = df_filtrado[
+    (df_filtrado["Data"] >= pd.to_datetime(data_inicio)) &
+    (df_filtrado["Data"] <= pd.to_datetime(data_fim))
+]
+
+if df_filtrado.empty:
+    st.warning("⚠️ Nenhum dado encontrado para os filtros aplicados.")
     st.stop()
 
 # ============================================================
