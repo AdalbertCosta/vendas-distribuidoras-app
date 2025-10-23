@@ -118,6 +118,7 @@ df = carregar_dados()
 if df.empty:
     st.stop()
 
+
 # ============================================================
 # 🧭 FILTROS
 # ============================================================
@@ -141,7 +142,7 @@ data_inicio, data_fim = st.sidebar.date_input(
 mapeamento_empresas = {"10": "GAM", "20": "AND", "30": "FARMED"}
 df["EmpresaNome"] = df["CodEmpresa"].astype(str).map(mapeamento_empresas).fillna(df["CodEmpresa"])
 empresas = sorted(df["EmpresaNome"].dropna().unique())
-empresa_sel = st.sidebar.multiselect("🏢 Empresa:", options=empresas, placeholder="Todas")
+empresa_sel = st.sidebar.multiselect("🏢 Empresa:", options=empresas, placeholder="Todas", key="empresa_filtro")
 
 st.sidebar.markdown(
     """
@@ -189,6 +190,8 @@ df_filtrado = df_filtrado[
 if df_filtrado.empty:
     st.warning("⚠️ Nenhum dado encontrado para os filtros aplicados.")
     st.stop()
+
+
 
 # ============================================================
 # 🏢 Filtro por Empresa (CodEmpresa)
