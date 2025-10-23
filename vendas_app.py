@@ -98,11 +98,24 @@ if df_filtrado.empty:
     st.stop()
 
 # ============================================================
-# 🔢 MÉTRICAS GERAIS
+# 🔢 MÉTRICAS GERAIS (com limpeza extra para precisão)
 # ============================================================
+df_filtrado["TotalLinha"] = (
+    df_filtrado["TotalLinha"]
+    .astype(str)
+    .str.replace(r"[^0-9,.-]", "", regex=True)
+    .str.replace(",", ".", regex=False)
+    .astype(float)
+)
+df_filtrado["Quantidade"] = pd.to_numeric(df_filtrado["Quantidade"], errors="coerce")
+
+total_vendas = df_filtrado["TotalLinha"].sum()
+total_qtd = df_filtrado["Quantidade"].sum()
+
 col1, col2 = st.columns(2)
-col1.metric("💰 Total de Vendas", f"R$ {df_filtrado['TotalLinha'].sum():,.2f}")
-col2.metric("📦 Quantidade Total", f"{df_filtrado['Quantidade'].sum():,.0f}")
+col1.metric("💰 Total de Vendas", f"R$ {total_vendas:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+col2.metric("📦 Quantidade Total", f"{int(total_qtd):,}".replace(",", "."))
+
 
 # ============================================================
 # 🧮 EXIBIÇÃO DE DADOS
