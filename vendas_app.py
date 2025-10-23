@@ -153,6 +153,36 @@ df_filtrado = df_filtrado[
 if df_filtrado.empty:
     st.warning("⚠️ Nenhum dado encontrado para os filtros aplicados.")
     st.stop()
+    
+# ============================================================
+# 🏢 Filtro por Empresa (CodEmpresa)
+# ============================================================
+mapeamento_empresas = {
+    "10": "GAM",
+    "20": "AND",
+    "30": "FARMED"
+}
+
+# Cria coluna com nome da empresa
+df["EmpresaNome"] = df["CodEmpresa"].astype(str).map(mapeamento_empresas).fillna(df["CodEmpresa"])
+
+empresas = sorted(df["EmpresaNome"].dropna().unique())
+empresa_sel = st.sidebar.multiselect("🏢 Empresa:", options=empresas, placeholder="Todas")
+
+# Aplica filtro por empresa
+df_filtrado = df.copy()
+if empresa_sel:
+    df_filtrado = df_filtrado[df_filtrado["EmpresaNome"].isin(empresa_sel)]
+
+# Mostra legenda explicativa
+st.sidebar.markdown(
+    """
+    **🔎 Códigos de Empresa:**  
+    • 10 → GAM  
+    • 20 → AND  
+    • 30 → FARMED
+    """
+)
 
 # ============================================================
 # 🔢 MÉTRICAS (Bruta, Devolução, Líquida)
