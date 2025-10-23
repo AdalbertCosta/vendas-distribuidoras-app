@@ -200,31 +200,6 @@ if df_filtrado.empty:
     st.warning("⚠️ Nenhum dado encontrado para os filtros aplicados.")
     st.stop()
 
-# ============================================================
-# 🔍 APLICAÇÃO DE FILTROS
-# ============================================================
-
-df_filtrado = df.copy()
-
-if empresa_sel:
-    df_filtrado = df_filtrado[df_filtrado["EmpresaNome"].isin(empresa_sel)]
-if cardcodes:
-    df_filtrado = df_filtrado[df_filtrado["CardCode"].isin(cardcodes)]
-if operacao_sel:
-    df_filtrado = df_filtrado[df_filtrado["Operacao"].isin(operacao_sel)]
-if itens_sel:
-    df_filtrado = df_filtrado[df_filtrado["ItemCode"].isin(itens_sel)]
-
-df_filtrado = df_filtrado[
-    (df_filtrado["Data"] >= pd.to_datetime(data_inicio)) &
-    (df_filtrado["Data"] <= pd.to_datetime(data_fim))
-]
-
-if df_filtrado.empty:
-    st.warning("⚠️ Nenhum dado encontrado para os filtros aplicados.")
-    st.stop()
-
-
 
 # ============================================================
 # 🏢 Filtro por Empresa (CodEmpresa)
