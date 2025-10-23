@@ -22,76 +22,41 @@ colunas_desejadas = [
     "ItemCode", "Quantidade", "TotalLinha"
 ]
 
+
 # ============================================================
-# 🔄 CARREGAMENTO DOS DADOS
+# 🧭 FILTROS LATERAIS
 # ============================================================
 @st.cache_data
 def carregar_dados():
     try:
-        df = pd.read_excel(URL_GITHUB, sheet_name=nome_aba, usecols=colunas_desejadas, dtype=str)
-        df.columns = df.columns.str.strip()
+        df = pd.read_excel(
+            URL_GITHUB,
+            sheet_name=nome_aba,
+            usecols=colunas_desejadas,
+            dtype=str,
+            engine="openpyxl"
+        )
 
-        # Converte tipos
+        df.columns = df.columns.str.strip()
         df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
 
-        def _parse_number(x):
-            if pd.isna(x):
-                return None
-            s = str(x).strip().replace("R$", "").replace(".", "").replace(",", ".")
-            try:
-                return float(s)
-            except:
-                return None
+        # Converte campos numéricos com segurança (suporta vírgulas)
+        for col in ["TotalLinha", "Quantidade"]:
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.replace(r"[^0-9,.-]", "", regex=True)  # remove R$, espaços, letras
+                .str.replace(",", ".", regex=False)         # troca vírgula por ponto
+            )
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        df["TotalLinha"] = df["TotalLinha"].map(_parse_number)
-        df["Quantidade"] = df["Quantidade"].map(_parse_number)
         df = df.dropna(subset=["Data", "TotalLinha", "Quantidade"])
-
         return df
 
     except Exception as e:
         st.error(f"❌ Erro ao carregar o arquivo: {e}")
         return pd.DataFrame()
 
-# Carrega dados
-df = carregar_dados()
-if df.empty:
-    st.stop()
-
-# ============================================================
-# 🧭 FILTROS LATERAIS
-# ============================================================
-st.sidebar.header("🧩 Filtros de Visualização")
-
-clientes = sorted(df["CardCode"].dropna().unique())
-operacoes = sorted(df["Operacao"].dropna().unique())
-itens = sorted(df["ItemCode"].dropna().unique())
-
-cardcodes = st.sidebar.multiselect("🔍 Selecione cliente(s):", options=clientes, placeholder="Todos")
-operacao_sel = st.sidebar.multiselect("⚙️ Operação:", options=operacoes, placeholder="Todas")
-itens_sel = st.sidebar.multiselect("📦 ItemCode:", options=itens, placeholder="Todos")
-
-min_data, max_data = df["Data"].min(), df["Data"].max()
-data_inicio, data_fim = st.sidebar.date_input("📅 Intervalo de datas:", [min_data, max_data],
-                                              min_value=min_data, max_value=max_data)
-
-# Filtro dinâmico
-df_filtrado = df.copy()
-if cardcodes:
-    df_filtrado = df_filtrado[df_filtrado["CardCode"].isin(cardcodes)]
-if operacao_sel:
-    df_filtrado = df_filtrado[df_filtrado["Operacao"].isin(operacao_sel)]
-if itens_sel:
-    df_filtrado = df_filtrado[df_filtrado["ItemCode"].isin(itens_sel)]
-
-df_filtrado = df_filtrado[
-    (df_filtrado["Data"] >= pd.to_datetime(data_inicio)) &
-    (df_filtrado["Data"] <= pd.to_datetime(data_fim))
-]
-
-if df_filtrado.empty:
-    st.warning("⚠️ Nenhum dado encontrado para os filtros aplicados.")
-    st.stop()
 
 # ============================================================
 # 🔢 MÉTRICAS GERAIS
