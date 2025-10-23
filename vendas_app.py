@@ -1,5 +1,5 @@
 # ============================================================
-# 📊 VISUALIZAÇÃO DE VENDAS - DISTRIBUIDORA (v8)
+# 📊 VISUALIZAÇÃO DE VENDAS - DISTRIBUIDORA (v9 FINAL)
 # ============================================================
 
 import pandas as pd
@@ -28,7 +28,7 @@ def autenticar():
     st.sidebar.header("🔐 Acesso Restrito")
     usuario = st.sidebar.text_input("Usuário")
     senha = st.sidebar.text_input("Senha", type="password")
-    if st.sidebar.button("Entrar", type="primary"):
+    if st.sidebar.button("Entrar", type="primary", key="btn_login"):
         if usuario in USUARIOS and senha == USUARIOS[usuario]:
             st.session_state["autenticado"] = True
             st.session_state["usuario"] = usuario
@@ -37,13 +37,16 @@ def autenticar():
             st.sidebar.error("Usuário ou senha inválidos.")
 
 def logout():
-    if st.sidebar.button("Sair"):
+    if st.sidebar.button("Sair", key="btn_logout"):
         st.session_state["autenticado"] = False
         st.session_state["usuario"] = None
+        st.session_state["gerar"] = False
         st.rerun()
 
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
+if "gerar" not in st.session_state:
+    st.session_state["gerar"] = False
 
 if not st.session_state["autenticado"]:
     autenticar()
@@ -97,33 +100,40 @@ if df.empty:
 # ============================================================
 st.sidebar.header("🧩 Filtros de Visualização")
 
-clientes = sorted(df["CardCode"].dropna().unique())
-operacoes = sorted(df["Operacao"].dropna().unique())
-itens = sorted(df["ItemCode"].dropna().unique())
-empresas = sorted(df["EmpresaNome"].dropna().unique())
+clientes   = sorted(df["CardCode"].dropna().unique())
+operacoes  = sorted(df["Operacao"].dropna().unique())
+itens      = sorted(df["ItemCode"].dropna().unique())
+empresas   = sorted(df["EmpresaNome"].dropna().unique())
 
-cardcodes = st.sidebar.multiselect("🔍 Cliente(s):", options=clientes, placeholder="Selecione cliente(s)...")
+cardcodes    = st.sidebar.multiselect("🔍 Cliente(s):", options=clientes, placeholder="Selecione cliente(s)...")
 operacao_sel = st.sidebar.multiselect("⚙️ Operação:", options=operacoes, placeholder="Todas")
-itens_sel = st.sidebar.multiselect("📦 ItemCode:", options=itens, placeholder="Todos")
-empresa_sel = st.sidebar.multiselect("🏢 Empresa:", options=empresas, placeholder="Todas")
+itens_sel    = st.sidebar.multiselect("📦 ItemCode:", options=itens, placeholder="Todos")
+empresa_sel  = st.sidebar.multiselect("🏢 Empresa:", options=empresas, placeholder="Todas")
 
 min_data, max_data = df["Data"].min(), df["Data"].max()
-intervalo = st.sidebar.date_input("📅 Intervalo de Datas:", [min_data, max_data], min_value=min_data, max_value=max_data)
+intervalo_datas = st.sidebar.date_input("📅 Intervalo de Datas:", [min_data, max_data], min_value=min_data, max_value=max_data)
 
-st.sidebar.markdown("**🔎 Códigos de Empresa:**<br>• 10 → GAM<br>• 20 → AND<br>• 30 → FARMED", unsafe_allow_html=True)
+st.sidebar.markdown(
+    """
+    **🔎 Códigos de Empresa:**  
+    • 10 → GAM  
+    • 20 → AND  
+    • 30 → FARMED
+    """
+)
 
 # ============================================================
-# 🎛️ BOTÃO DE AÇÃO
+# 🎛️ BOTÃO PARA GERAR GRÁFICOS (com key única)
 # ============================================================
-if st.sidebar.button("📊 Gerar Gráficos", type="primary"):
+if st.sidebar.button("📊 Gerar Gráficos", type="primary", key="btn_gerar"):
     st.session_state["gerar"] = True
 
-if not st.session_state.get("gerar"):
+if not st.session_state["gerar"]:
     st.info("👆 Selecione filtros e clique em **Gerar Gráficos** para visualizar os painéis.")
     st.stop()
 
 # ============================================================
-# 🔍 APLICA FILTROS
+# 🔍 APLICAÇÃO DOS FILTROS
 # ============================================================
 df_filtrado = df.copy()
 
@@ -136,7 +146,7 @@ if operacao_sel:
 if itens_sel:
     df_filtrado = df_filtrado[df_filtrado["ItemCode"].isin(itens_sel)]
 
-data_inicio, data_fim = pd.to_datetime(intervalo[0]), pd.to_datetime(intervalo[1])
+data_inicio, data_fim = pd.to_datetime(intervalo_datas[0]), pd.to_datetime(intervalo_datas[1])
 df_filtrado = df_filtrado[(df_filtrado["Data"] >= data_inicio) & (df_filtrado["Data"] <= data_fim)]
 
 if df_filtrado.empty:
@@ -182,9 +192,11 @@ st.markdown("---")
 st.success("✅ Filtros aplicados com sucesso!")
 st.caption("Abaixo estão as análises interativas de vendas:")
 
-# (Mantém as mesmas abas e gráficos da versão anterior)
+# 🔹 Mantém as abas e gráficos originais (abas[0] ... abas[7])
 # ------------------------------------------------------------
-# [Cole aqui os blocos de gráficos originais (abas[0] ... abas[7])]
+# Basta manter seus gráficos existentes — já compatíveis com df_filtrado
+# ------------------------------------------------------------
+
 # ------------------------------------------------------------
 
 # ============================================================
@@ -195,7 +207,8 @@ if "gerar" not in st.session_state:
     st.session_state.gerar = False
 
 # Botão manual para aplicar filtros
-if st.sidebar.button("📊 Gerar Gráficos", type="primary"):
+if st.sidebar.button("📊 Gerar Gráficos", type="primary", key="btn_gerar"):
+
     st.session_state.gerar = True
 
 # ============================================================
