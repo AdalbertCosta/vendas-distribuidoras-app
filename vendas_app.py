@@ -1,5 +1,5 @@
 # ============================================================
-# 📊 VISUALIZAÇÃO DE VENDAS - DISTRIBUIDORA (v10 FINAL COMPLETO)
+# 📊 VISUALIZAÇÃO DE VENDAS - DISTRIBUIDORA (v11 FINAL COMPLETO)
 # ============================================================
 
 import pandas as pd
@@ -59,13 +59,15 @@ else:
 # ============================================================
 # 📦 FONTE DE DADOS
 # ============================================================
-URL_GITHUB = "https://github.com/AdalbertCosta/vendas-distribuidoras-app/raw/refs/heads/main/data/Vendas_Dist.xlsx"
+URL_VENDAS = "https://github.com/AdalbertCosta/vendas-distribuidoras-app/raw/refs/heads/main/data/Vendas_Dist.xlsx"
+URL_PRODUTOS = "https://github.com/AdalbertCosta/vendas-distribuidoras-app/raw/refs/heads/main/data/Produtos.xlsx"
+
 NOME_ABA = "dist_novobi"
 COLUNAS = ["Operacao", "Data", "CodEmpresa", "CardCode", "Origem", "Utilizacao", "ItemCode", "Quantidade", "TotalLinha"]
 
 @st.cache_data(ttl=600)
 def carregar_dados():
-    df = pd.read_excel(URL_GITHUB, sheet_name=NOME_ABA, usecols=COLUNAS, dtype=str, engine="openpyxl")
+    df = pd.read_excel(URL_VENDAS, sheet_name=NOME_ABA, usecols=COLUNAS, dtype=str, engine="openpyxl")
     df.columns = df.columns.str.strip()
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
 
@@ -85,10 +87,27 @@ def carregar_dados():
     df["EmpresaNome"] = df["CodEmpresa"].astype(str).map({"10": "GAM", "20": "AND", "30": "FARMED"}).fillna(df["CodEmpresa"])
     return df
 
+@st.cache_data(ttl=600)
+def carregar_produtos():
+    dfp = pd.read_excel(URL_PRODUTOS, usecols=["ItemCode", "ItemName", "Categoria"], engine="openpyxl")
+    dfp["ItemCode"] = dfp["ItemCode"].astype(str).str.strip().str.zfill(3)
+    dfp["ItemName"] = dfp["ItemName"].astype(str).str.strip()
+    dfp["Categoria"] = dfp["Categoria"].astype(str).str.strip()
+    return dfp
+
 df = carregar_dados()
-if df.empty:
-    st.error("❌ Nenhum dado carregado.")
-    st.stop()
+df_produtos = carregar_produtos()
+
+# Padroniza códigos e faz merge
+df["ItemCode"] = df["ItemCode"].astype(str).str.strip().str.zfill(3)
+df = df.merge(df_produtos, on="ItemCode", how="left")
+
+# Alerta lateral
+itens_sem_nome = df[df["ItemName"].isna()]["ItemCode"].unique()
+if len(itens_sem_nome) > 0:
+    st.sidebar.warning(f"⚠️ {len(itens_sem_nome)} produtos sem correspondência no catálogo.")
+else:
+    st.sidebar.success("📚 Catálogo de produtos vinculado com sucesso!")
 
 # ============================================================
 # 🧭 FILTROS
@@ -108,11 +127,6 @@ empresa_sel  = st.sidebar.multiselect("🏢 Empresa:", options=empresas, placeho
 min_data, max_data = df["Data"].min(), df["Data"].max()
 intervalo_datas = st.sidebar.date_input("📅 Intervalo de Datas:", [min_data, max_data], min_value=min_data, max_value=max_data)
 
-st.sidebar.markdown("**🔎 Códigos de Empresa:**<br>• 10 → GAM<br>• 20 → AND<br>• 30 → FARMED", unsafe_allow_html=True)
-
-# ============================================================
-# 🎛️ BOTÃO DE AÇÃO ÚNICO
-# ============================================================
 if st.sidebar.button("📊 Gerar Gráficos", type="primary", key="btn_gerar_graficos"):
     st.session_state.filtros_aplicados = True
 
@@ -166,7 +180,7 @@ c5.metric("↩️ Quantidade Devolvida", fmt_int_br(qtd_dev))
 c6.metric("🧮 Quantidade Líquida", fmt_int_br(qtd_liq))
 
 # ============================================================
-# 📤 EXPORTAÇÃO CSV
+# 📤 EXPORTAÇÃO
 # ============================================================
 with st.sidebar.expander("📤 Exportar Dados"):
     buffer = BytesIO()
@@ -223,9 +237,17 @@ with abas[0]:
 # ============================================================
 with abas[1]:
     st.subheader("🏆 Top Produtos (por Quantidade Líquida)")
-    top_itens = df_filtrado.groupby("ItemCode")["Quantidade"].sum().nlargest(10).reset_index()
-    chart_top = alt.Chart(top_itens).mark_bar(color=COR_PRIMARIA).encode(
-        x="Quantidade:Q", y=alt.Y("ItemCode:N", sort="-x"), tooltip=["ItemCode", "Quantidade"]
+    top_itens = (
+        df_filtrado.groupby(["ItemCode", "ItemName", "Categoria"])["Quantidade"]
+        .sum()
+        .nlargest(10)
+        .reset_index()
+    )
+    chart_top = alt.Chart(top_itens).mark_bar().encode(
+        x="Quantidade:Q",
+        y=alt.Y("ItemName:N", sort="-x", title="Produto"),
+        color=alt.Color("Categoria:N", legend=alt.Legend(title="Categoria")),
+        tooltip=["ItemCode", "ItemName", "Categoria", alt.Tooltip("Quantidade:Q", format=",.0f")]
     ).properties(width="container", height=420)
     st.altair_chart(chart_top, use_container_width=True)
 
@@ -236,7 +258,8 @@ with abas[2]:
     st.subheader("👤 Total de Vendas Líquidas por Cliente")
     total_por_cliente = df_filtrado.groupby("CardCode")["TotalLinha"].sum().reset_index()
     chart_cliente = alt.Chart(total_por_cliente).mark_bar(color=COR_PRIMARIA).encode(
-        x="TotalLinha:Q", y=alt.Y("CardCode:N", sort="-x"), tooltip=["CardCode", alt.Tooltip("TotalLinha:Q", format=",.2f")]
+        x="TotalLinha:Q", y=alt.Y("CardCode:N", sort="-x"),
+        tooltip=["CardCode", alt.Tooltip("TotalLinha:Q", format=",.2f")]
     ).properties(width="container", height=420)
     st.altair_chart(chart_cliente, use_container_width=True)
 
@@ -249,7 +272,8 @@ with abas[3]:
     tm = tm[tm["Quantidade"] != 0]
     tm["Ticket Médio"] = tm["TotalLinha"] / tm["Quantidade"]
     chart_ticket = alt.Chart(tm).mark_bar(color=COR_PRIMARIA).encode(
-        x="Ticket Médio:Q", y=alt.Y("CardCode:N", sort="-x"), tooltip=["CardCode", alt.Tooltip("Ticket Médio:Q", format=",.2f")]
+        x="Ticket Médio:Q", y=alt.Y("CardCode:N", sort="-x"),
+        tooltip=["CardCode", alt.Tooltip("Ticket Médio:Q", format=",.2f")]
     ).properties(width="container", height=420)
     st.altair_chart(chart_ticket, use_container_width=True)
 
@@ -306,6 +330,7 @@ with abas[6]:
             tooltip=["CardCode", alt.Tooltip("Crescimento_pct:Q", format=".2f")]
         ).properties(width="container", height=420)
         st.altair_chart(chart_cres, use_container_width=True)
+
 
 # ============================================================
 # ♻️ ANÁLISE DE DEVOLUÇÕES
