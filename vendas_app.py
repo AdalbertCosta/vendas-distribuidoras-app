@@ -1,5 +1,5 @@
 # ============================================================
-# 📊 VISUALIZAÇÃO DE VENDAS - DISTRIBUIDORA (v7)
+# 📊 VISUALIZAÇÃO DE VENDAS - DISTRIBUIDORA (v8)
 # ============================================================
 
 import pandas as pd
@@ -22,10 +22,7 @@ st.title("📊 Visualização de Vendas - Distribuidora")
 # ============================================================
 # 🔐 LOGIN (obrigatório)
 # ============================================================
-USUARIOS = {
-    "adalberto": "1234",
-    #"televendas": "2027",
-}
+USUARIOS = {"adalberto": "1234"}
 
 def autenticar():
     st.sidebar.header("🔐 Acesso Restrito")
@@ -47,7 +44,6 @@ def logout():
 
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
-    st.session_state["usuario"] = None
 
 if not st.session_state["autenticado"]:
     autenticar()
@@ -57,101 +53,139 @@ else:
     logout()
 
 # ============================================================
-# 📦 FONTE DE DADOS (GitHub RAW)
+# 📦 FONTE DE DADOS
 # ============================================================
 URL_GITHUB = "https://github.com/AdalbertCosta/vendas-distribuidoras-app/raw/refs/heads/main/data/Vendas_Dist.xlsx"
 NOME_ABA = "dist_novobi"
-COLUNAS = [
-    "Operacao", "Data", "CodEmpresa", "CardCode", "Origem", "Utilizacao",
-    "ItemCode", "Quantidade", "TotalLinha"
-]
+COLUNAS = ["Operacao", "Data", "CodEmpresa", "CardCode", "Origem", "Utilizacao", "ItemCode", "Quantidade", "TotalLinha"]
 
 # ============================================================
-# 🔄 CARREGAMENTO + LIMPEZA
+# 🔄 CARREGAMENTO E LIMPEZA
 # ============================================================
-@st.cache_data
+@st.cache_data(ttl=600)
 def carregar_dados():
-    try:
-        df = pd.read_excel(
-            URL_GITHUB, sheet_name=NOME_ABA, usecols=COLUNAS, dtype=str, engine="openpyxl"
+    df = pd.read_excel(URL_GITHUB, sheet_name=NOME_ABA, usecols=COLUNAS, dtype=str, engine="openpyxl")
+    df.columns = df.columns.str.strip()
+    df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+
+    for col in ["TotalLinha", "Quantidade"]:
+        df[col] = (
+            df[col].astype(str)
+            .str.replace(r"[^0-9,.-]", "", regex=True)
+            .str.replace(",", ".", regex=False)
         )
-        df.columns = df.columns.str.strip()
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        # Datas
-        df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+    df = df.dropna(subset=["Data", "TotalLinha", "Quantidade"])
 
-        # Conversão robusta de numéricos (suporta vírgula)
-        for col in ["TotalLinha", "Quantidade"]:
-            df[col] = (
-                df[col]
-                .astype(str)
-                .str.replace(r"[^0-9,.-]", "", regex=True)
-                .str.replace(",", ".", regex=False)
-            )
-            df[col] = pd.to_numeric(df[col], errors="coerce")
+    # Corrige devoluções
+    df["Operacao"] = df["Operacao"].astype(str).str.strip().str.upper()
+    df.loc[df["Operacao"] == "NF_DEV", ["TotalLinha", "Quantidade"]] *= -1
 
-        df = df.dropna(subset=["Data", "TotalLinha", "Quantidade"])
+    df["TipoOperacao"] = df["Operacao"].apply(lambda x: "Venda" if x == "NF" else "Devolução")
+    df["EmpresaNome"] = df["CodEmpresa"].astype(str).map({"10": "GAM", "20": "AND", "30": "FARMED"}).fillna(df["CodEmpresa"])
 
-        # NF_DEV como devolução (valores negativos)
-        def _neg_total(row):
-            op = str(row["Operacao"]).upper().strip()
-            return -abs(row["TotalLinha"]) if op == "NF_DEV" else row["TotalLinha"]
-
-        def _neg_qtd(row):
-            op = str(row["Operacao"]).upper().strip()
-            return -abs(row["Quantidade"]) if op == "NF_DEV" else row["Quantidade"]
-
-        df["TotalLinha"] = df.apply(_neg_total, axis=1)
-        df["Quantidade"] = df.apply(_neg_qtd, axis=1)
-
-        # Tipo amigável
-        df["TipoOperacao"] = df["Operacao"].apply(
-            lambda x: "Venda" if str(x).upper().strip() == "NF" else "Devolução"
-        )
-
-        return df
-    except Exception as e:
-        st.error(f"❌ Erro ao carregar o arquivo: {e}")
-        return pd.DataFrame()
+    return df
 
 df = carregar_dados()
 if df.empty:
+    st.error("❌ Nenhum dado foi carregado.")
     st.stop()
-
 
 # ============================================================
 # 🧭 FILTROS
 # ============================================================
-
 st.sidebar.header("🧩 Filtros de Visualização")
 
-clientes   = sorted(df["CardCode"].dropna().unique())
-operacoes  = sorted(df["Operacao"].dropna().unique())
-itens      = sorted(df["ItemCode"].dropna().unique())
+clientes = sorted(df["CardCode"].dropna().unique())
+operacoes = sorted(df["Operacao"].dropna().unique())
+itens = sorted(df["ItemCode"].dropna().unique())
+empresas = sorted(df["EmpresaNome"].dropna().unique())
 
-cardcodes   = st.sidebar.multiselect("🔍 Cliente(s):", options=clientes,  placeholder="Selecione cliente(s)...")
-operacao_sel= st.sidebar.multiselect("⚙️ Operação:",  options=operacoes, placeholder="Todas")
-itens_sel   = st.sidebar.multiselect("📦 ItemCode:",   options=itens,     placeholder="Todos")
+cardcodes = st.sidebar.multiselect("🔍 Cliente(s):", options=clientes, placeholder="Selecione cliente(s)...")
+operacao_sel = st.sidebar.multiselect("⚙️ Operação:", options=operacoes, placeholder="Todas")
+itens_sel = st.sidebar.multiselect("📦 ItemCode:", options=itens, placeholder="Todos")
+empresa_sel = st.sidebar.multiselect("🏢 Empresa:", options=empresas, placeholder="Todas")
 
 min_data, max_data = df["Data"].min(), df["Data"].max()
-data_inicio, data_fim = st.sidebar.date_input(
-    "📅 Intervalo de datas:", [min_data, max_data], min_value=min_data, max_value=max_data
-)
+intervalo = st.sidebar.date_input("📅 Intervalo de Datas:", [min_data, max_data], min_value=min_data, max_value=max_data)
 
-# 🏢 Filtro por Empresa
-mapeamento_empresas = {"10": "GAM", "20": "AND", "30": "FARMED"}
-df["EmpresaNome"] = df["CodEmpresa"].astype(str).map(mapeamento_empresas).fillna(df["CodEmpresa"])
-empresas = sorted(df["EmpresaNome"].dropna().unique())
-empresa_sel = st.sidebar.multiselect("🏢 Empresa:", options=empresas, placeholder="Todas", key="empresa_filtro")
+st.sidebar.markdown("**🔎 Códigos de Empresa:**<br>• 10 → GAM<br>• 20 → AND<br>• 30 → FARMED", unsafe_allow_html=True)
 
-st.sidebar.markdown(
-    """
-    **🔎 Códigos de Empresa:**  
-    • 10 → GAM  
-    • 20 → AND  
-    • 30 → FARMED
-    """
-)
+# ============================================================
+# 🎛️ BOTÃO DE AÇÃO
+# ============================================================
+if st.sidebar.button("📊 Gerar Gráficos", type="primary"):
+    st.session_state["gerar"] = True
+
+if not st.session_state.get("gerar"):
+    st.info("👆 Selecione filtros e clique em **Gerar Gráficos** para visualizar os painéis.")
+    st.stop()
+
+# ============================================================
+# 🔍 APLICA FILTROS
+# ============================================================
+df_filtrado = df.copy()
+
+if empresa_sel:
+    df_filtrado = df_filtrado[df_filtrado["EmpresaNome"].isin(empresa_sel)]
+if cardcodes:
+    df_filtrado = df_filtrado[df_filtrado["CardCode"].isin(cardcodes)]
+if operacao_sel:
+    df_filtrado = df_filtrado[df_filtrado["Operacao"].isin(operacao_sel)]
+if itens_sel:
+    df_filtrado = df_filtrado[df_filtrado["ItemCode"].isin(itens_sel)]
+
+data_inicio, data_fim = pd.to_datetime(intervalo[0]), pd.to_datetime(intervalo[1])
+df_filtrado = df_filtrado[(df_filtrado["Data"] >= data_inicio) & (df_filtrado["Data"] <= data_fim)]
+
+if df_filtrado.empty:
+    st.warning("⚠️ Nenhum dado encontrado para os filtros aplicados.")
+    st.stop()
+
+# ============================================================
+# 🔢 MÉTRICAS
+# ============================================================
+vendas_brutas = df_filtrado.loc[df_filtrado["TotalLinha"] > 0, "TotalLinha"].sum()
+devolucoes = df_filtrado.loc[df_filtrado["TotalLinha"] < 0, "TotalLinha"].sum()
+vendas_liq = df_filtrado["TotalLinha"].sum()
+
+qtd_bruta = df_filtrado.loc[df_filtrado["Quantidade"] > 0, "Quantidade"].sum()
+qtd_dev = df_filtrado.loc[df_filtrado["Quantidade"] < 0, "Quantidade"].sum()
+qtd_liq = df_filtrado["Quantidade"].sum()
+
+def fmt_moeda_br(v): return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+def fmt_int_br(v): return f"{int(round(v)):,}".replace(",", ".") if pd.notna(v) else "0"
+
+c1, c2, c3 = st.columns(3)
+c1.metric("💰 Vendas Brutas", fmt_moeda_br(vendas_brutas))
+c2.metric("↩️ Devoluções", fmt_moeda_br(devolucoes))
+c3.metric("🧮 Vendas Líquidas", fmt_moeda_br(vendas_liq))
+
+c4, c5, c6 = st.columns(3)
+c4.metric("📦 Quantidade Bruta", fmt_int_br(qtd_bruta))
+c5.metric("↩️ Quantidade Devolvida", fmt_int_br(qtd_dev))
+c6.metric("🧮 Quantidade Líquida", fmt_int_br(qtd_liq))
+
+# ============================================================
+# 📋 DADOS FILTRADOS
+# ============================================================
+with st.expander("📋 Visualizar Dados Filtrados"):
+    df_show = df_filtrado.copy()
+    df_show["Data"] = df_show["Data"].dt.strftime("%d/%m/%Y")
+    st.dataframe(df_show, use_container_width=True)
+
+# ============================================================
+# 🔢 CHAMA AS ABAS
+# ============================================================
+st.markdown("---")
+st.success("✅ Filtros aplicados com sucesso!")
+st.caption("Abaixo estão as análises interativas de vendas:")
+
+# (Mantém as mesmas abas e gráficos da versão anterior)
+# ------------------------------------------------------------
+# [Cole aqui os blocos de gráficos originais (abas[0] ... abas[7])]
+# ------------------------------------------------------------
 
 # ============================================================
 # 🎛️ BOTÃO PARA ATUALIZAR GRÁFICOS
